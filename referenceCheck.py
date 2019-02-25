@@ -6,7 +6,7 @@ import requests
 import re
 import pprint
 
-def getMD5(headerfile, verbose):
+def getMD5(headerfile, md5list, verbose):
   #Returns a list of all unique md5 values in a samtools header file
   md5list = []
   headerfile = headerfile.rstrip()
@@ -19,8 +19,13 @@ def getMD5(headerfile, verbose):
         for each in list:
           if 'M5' in each:
             md5 = re.sub('M5:','',each)
-            if md5 not in md5list:
-              md5list.append(md5)
+            if md5  in md5list.keys():
+                md5list[md5] = md5list[md5].append(headerfile)
+            else:
+                md5list[md5] = [headerfile]
+
+            #if md5 not in md5list:
+              #md5list.append(md5)
   return md5list
 
 def main (args):
@@ -30,27 +35,29 @@ def main (args):
   baseurl = "https://www.ebi.ac.uk/ena/cram/sequence/"
   #https://www.ebi.ac.uk/ena/cram/swagger-ui.html#/The_GA4GH_Refget_reference_sequence_retrieval_API.
   #Read the list of header files
-  headerfiless = open(args.inputfile,'r')
-  for headerfile in headerfiless:
+  headerfiles = open(args.inputfile,'r')
+  md5list = {}
+  for headerfile in headerfiles:
     logfile.write("Checking file " + headerfile)
-    md5list = getMD5(headerfile, args.verbose)
-    if args.verbose:
-      pprint.pprint(md5list)
-    for md5 in md5list:
-      try:
-        r = requests.get(baseurl + md5 + "/metadata")
-        if args.verbose:
-          print(r.url)
-          print(r.status_code)
-          pprint.pprint(r.json())
-        if r.json()['metadata']['md5'] is None:
-          logfile.write(("File\t%s\tMD5:\t%s\tMD5 value not found\n") % (headerfile, md5))
-      except requests.exceptions.Timeout as exception:
-        logfile.write(("File:\t%s\tMD5:\t%s\tTimeout error:\t%s\n") % (headerfile, md5,exception))
-      except requests.exceptions.HTTPError as exception:
-        logfile.write(("File:\t%s\tMD5:\t%s\tHTTPEerror:\t%s\n") % (headerfile, md5,exception))
+    md5list = getMD5(headerfile, md5list, args.verbose)
+    #if args.verbose:
+    #  pprint.pprint(md5list)
+  for (md5, filelist) in md5list.items():
+    try:
+      r = requests.get(baseurl + md5 + "/metadata")
+      if args.verbose:
+        print(r.url)
+        print(r.status_code)
+        pprint.pprint(r.json())
+      if r.json()['metadata']['md5'] is None:
+        logfile.writ(("MD5:\t%s\tMD5 Error:\tNot found\tFiles:\t%s\t") % (md5, ' '.join(filelist)))
+        #logfile.write(("File\t%s\tMD5:\t%s\tMD5 value not found\n") % (headerfile, md5))
+    except requests.exceptions.Timeout as exception:
+      logfile.write(("MD5:\t%s\tTimeout error:\t%s\tFiles:\t%s\n") % (md5,exception, ' '.join(filelist)))
+    except requests.exceptions.HTTPError as exception:
+      logfile.write(("MD5:\t%s\tHTTPError:\t%s\tFiles:\t%s\n") % (md5,exception, ' '.join(filelist)))
   logfile.close()
-  
+
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("-v", "--verbose", action = "store_true", help = 'Enable verbose feedback.')
